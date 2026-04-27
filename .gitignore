@@ -1,0 +1,18 @@
+# API Keys — KABHI UPLOAD MAT KARNA
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Data files (auto generate hoti hain)
+shipments.json
+
+# Virtual environment
+venv/
+env/
+
+# IDE files
+.vscode/
+.idea/

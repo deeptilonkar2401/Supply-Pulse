@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SupplyPulse — Live Supply Chain Monitor</title>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:Arial,sans-serif;background:#0f1117;color:#e0e0e0;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+  .navbar{background:#1a1d2e;padding:8px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #00d4aa33;flex-shrink:0}
+  .logo{font-size:18px;font-weight:700;color:#00d4aa}
+  .logo span{color:#fff;font-weight:300}
+  .nav-right{display:flex;align-items:center;gap:8px}
+  .refresh-top{background:#00d4aa;color:#0f1117;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer}
+  .reset-btn{background:#2a2d3e;color:#aaa;border:none;padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer}
+  .impact-banner{background:#1a1d2e;border-bottom:1px solid #2a2d3e;padding:6px 16px;display:flex;flex-shrink:0}
+  .impact-item{flex:1;text-align:center;border-right:1px solid #2a2d3e}
+  .impact-item:last-child{border-right:none}
+  .impact-num{font-size:18px;font-weight:700}
+  .impact-lbl{font-size:9px;color:#666;margin-top:1px}
+  .c-red{color:#ff4757}.c-amber{color:#ffa502}.c-green{color:#2ed573}.c-blue{color:#1e90ff}.c-teal{color:#00d4aa}.c-purple{color:#a855f7}
+  .main{display:flex;flex:1;overflow:hidden}
+  .right-panel{width:320px;background:#1a1d2e;display:flex;flex-direction:column;overflow:hidden;border-left:1px solid #2a2d3e}
+  .panel-tabs{display:flex;border-bottom:1px solid #2a2d3e;flex-shrink:0}
+  .tab{flex:1;padding:8px 4px;text-align:center;cursor:pointer;font-size:11px;color:#888}
+  .tab.active{color:#00d4aa;border-bottom:2px solid #00d4aa}
+  .panel-content{flex:1;overflow-y:auto;padding:8px}
+  .alert-card{background:#0f1117;border-radius:8px;padding:9px 10px;margin-bottom:6px;border-left:3px solid #888;cursor:pointer;transition:transform .15s}
+  .alert-card:hover{transform:translateX(2px)}
+  .alert-card.high{border-left-color:#ff4757}
+  .alert-card.medium{border-left-color:#ffa502}
+  .alert-card.low{border-left-color:#2ed573}
+  .alert-card.rerouted{border-left-color:#1e90ff;opacity:.65}
+  .alert-id{font-size:12px;font-weight:700;color:#fff}
+  .alert-route{font-size:10px;color:#888;margin:2px 0}
+  .alert-cargo{font-size:10px;color:#aaa}
+  .risk-badge{display:inline-block;padding:2px 7px;border-radius:20px;font-size:9px;font-weight:700;float:right}
+  .risk-badge.high{background:#ff475722;color:#ff4757}
+  .risk-badge.medium{background:#ffa50222;color:#ffa502}
+  .risk-badge.low{background:#2ed57322;color:#2ed573}
+  .risk-badge.rerouted{background:#1e90ff22;color:#1e90ff}
+  .cascade-badge{background:#a855f722;color:#a855f7;border-radius:4px;font-size:9px;padding:1px 5px;margin-left:4px;font-weight:700}
+  .detail-drawer{background:#1a1d2e;border-top:2px solid #00d4aa33;padding:12px;display:none;max-height:58vh;overflow-y:auto;flex-shrink:0}
+  .detail-drawer.open{display:block}
+  .drawer-title{font-size:13px;font-weight:700;color:#fff;margin-bottom:8px}
+  .detail-row{display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid #2a2d3e33}
+  .detail-row .key{color:#666}
+  .detail-row .val{color:#e0e0e0;font-weight:500;text-align:right}
+  .risk-bars{margin:8px 0}
+  .bar-row{margin-bottom:5px}
+  .bar-label{font-size:10px;color:#888;margin-bottom:2px;display:flex;justify-content:space-between}
+  .bar-bg{background:#2a2d3e;border-radius:4px;height:5px}
+  .bar-fill{height:5px;border-radius:4px;transition:width .6s}
+  .btn{width:100%;padding:9px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;margin-top:5px;transition:opacity .2s}
+  .btn:hover{opacity:.85}
+  .btn-ai{background:#7c3aed;color:#fff}
+  .btn-approve{background:#00d4aa;color:#0f1117}
+  .btn-secondary{background:#2a2d3e;color:#e0e0e0}
+  .ai-box{background:#0f1117;border-radius:8px;padding:10px;margin:8px 0;font-size:11px;line-height:1.6;color:#ccc;border:1px solid #7c3aed44;display:none}
+  .ai-box.show{display:block}
+  .ai-label{font-size:10px;color:#7c3aed;font-weight:700;margin-bottom:4px}
+  .ai-routes{margin-top:8px;font-size:10px;color:#888;line-height:1.7;background:#1a1d2e;border-radius:6px;padding:6px}
+  .audit-entry{background:#0f1117;border-radius:8px;padding:9px;margin-bottom:6px;border-left:3px solid #00d4aa}
+  .audit-id{font-size:11px;font-weight:700;color:#00d4aa}
+  .audit-msg{font-size:10px;color:#aaa;margin:2px 0;line-height:1.4}
+  .audit-saved{font-size:11px;color:#2ed573;font-weight:700}
+  .audit-time{font-size:10px;color:#555}
+  .filter-bar{display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;padding:0 8px}
+  .filter-btn{padding:3px 9px;border-radius:20px;border:1px solid #2a2d3e;background:transparent;color:#888;font-size:10px;cursor:pointer}
+  .filter-btn.active{background:#00d4aa22;color:#00d4aa;border-color:#00d4aa}
+  .search-bar{padding:8px;border-bottom:1px solid #2a2d3e;flex-shrink:0}
+  .search-input{width:100%;background:#0f1117;border:1px solid #2a2d3e;border-radius:6px;padding:6px 10px;color:#e0e0e0;font-size:12px;outline:none}
+  .search-input:focus{border-color:#00d4aa}
+  .future-section{background:#0f1117;border-radius:8px;padding:10px;margin-bottom:8px;border:1px solid #a855f722}
+  .future-title{font-size:12px;font-weight:700;color:#a855f7;margin-bottom:6px}
+  .future-item{font-size:11px;color:#aaa;padding:3px 0;border-bottom:1px solid #2a2d3e22;line-height:1.4}
+  .future-item:last-child{border-bottom:none}
+  .fdot{display:inline-block;width:5px;height:5px;border-radius:50%;background:#a855f7;margin-right:5px;vertical-align:middle}
+  .rerouted-box{background:#00d4aa11;border:1px solid #00d4aa33;border-radius:8px;padding:10px;font-size:11px;color:#00d4aa;margin-top:6px;line-height:1.6}
+  .loading{text-align:center;color:#555;font-size:12px;padding:20px}
+
+  /* TOAST - Auto popup alert */
+  .toast{position:fixed;top:75px;right:335px;background:#ff4757;color:#fff;padding:12px 16px;border-radius:10px;font-size:12px;font-weight:700;z-index:9999;display:none;max-width:280px;box-shadow:0 4px 20px #ff475766}
+  .toast.show{display:block;animation:slideIn .3s ease}
+  .toast-id{font-size:13px;font-weight:700;margin-bottom:3px}
+  .toast-msg{font-size:11px;font-weight:400;opacity:.9;line-height:1.4}
+  .toast-btn{background:rgba(255,255,255,0.25);border:none;color:#fff;padding:5px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;margin-top:8px;width:100%}
+  .toast-close{position:absolute;top:8px;right:10px;cursor:pointer;font-size:14px;opacity:.7}
+  @keyframes slideIn{from{transform:translateX(20px);opacity:0}to{transform:translateX(0);opacity:1}}
+
+  /* MAP CONTROLS */
+  .map-controls{position:absolute;top:10px;left:10px;z-index:999;display:flex;flex-direction:column;gap:5px}
+  .map-ctrl-btn{background:#1a1d2eee;border:1px solid #2a2d3e;color:#e0e0e0;padding:6px 12px;border-radius:6px;font-size:11px;cursor:pointer;white-space:nowrap;transition:all .2s}
+  .map-ctrl-btn:hover{border-color:#00d4aa;color:#00d4aa}
+  .map-ctrl-btn.active-red{background:#ff475722;color:#ff4757;border-color:#ff4757}
+
+  /* MAP LEGEND */
+  .map-legend{position:absolute;bottom:30px;left:10px;z-index:999;background:#1a1d2eee;border-radius:8px;padding:10px 12px;font-size:11px;border:1px solid #2a2d3e}
+  .legend-item{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+  .legend-item:last-child{margin-bottom:0}
+  .legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+
+  ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:#0f1117}::-webkit-scrollbar-thumb{background:#2a2d3e}
+  @keyframes pulse{0%{transform:translate(-50%,-50%) scale(1);opacity:0.8}50%{transform:translate(-50%,-50%) scale(1.4);opacity:0.3}100%{transform:translate(-50%,-50%) scale(1);opacity:0.8}}
+  .route-legend{background:#1a1d2e;border-radius:8px;padding:8px 10px;margin:8px 0;border:1px solid #2a2d3e;font-size:11px}
+  .route-leg-item{display:flex;align-items:center;gap:7px;margin-bottom:4px}
+  .route-leg-item:last-child{margin-bottom:0}
+  .route-line-prev{width:24px;height:3px;background:#ff4757;border-radius:2px;border-top:2px dashed #ff4757;background:transparent}
+  .route-line-new{width:24px;height:3px;background:#00d4aa;border-radius:2px}
+  .reroute-detail{background:#0f1117;border-radius:8px;padding:10px;margin:8px 0;border:1px solid #00d4aa33}
+  .reroute-detail-title{font-size:11px;font-weight:700;margin-bottom:6px}
+  .route-stop{display:inline-block;background:#2a2d3e;border-radius:4px;padding:2px 7px;font-size:10px;margin:2px 3px 2px 0}
+  .route-stop.current{background:#00d4aa22;color:#00d4aa;border:1px solid #00d4aa44}
+  .route-stop.old{background:#ff475722;color:#ff4757;border:1px solid #ff475744}
+</style>
+</head>
+<body>
+
+<!-- AUTO TOAST ALERT -->
+<div class="toast" id="toast" style="position:fixed">
+  <span class="toast-close" onclick="closeToast()">x</span>
+  <div class="toast-id" id="toast-id">Alert</div>
+  <div class="toast-msg" id="toast-msg"></div>
+  <button class="toast-btn" onclick="openFromToast()">View and Fix Now</button>
+</div>
+
+<!-- NAVBAR -->
+<div class="navbar">
+  <div class="logo">Supply<span>Pulse</span></div>
+  <div class="nav-right">
+    <span style="font-size:10px;color:#555" id="last-updated"></span>
+    <button class="reset-btn" onclick="resetData()">Reset Demo</button>
+    <button class="refresh-top" onclick="refreshRisk()">Refresh Risk</button>
+  </div>
+</div>
+
+<!-- IMPACT BANNER -->
+<div class="impact-banner">
+  <div class="impact-item"><div class="impact-num c-red"    id="stat-high">0</div><div class="impact-lbl">High Risk</div></div>
+  <div class="impact-item"><div class="impact-num c-amber"  id="stat-medium">0</div><div class="impact-lbl">Medium</div></div>
+  <div class="impact-item"><div class="impact-num c-green"  id="stat-low">0</div><div class="impact-lbl">Safe</div></div>
+  <div class="impact-item"><div class="impact-num c-blue"   id="stat-rerouted">0</div><div class="impact-lbl">Rerouted</div></div>
+  <div class="impact-item"><div class="impact-num c-teal"   id="stat-saved">0h</div><div class="impact-lbl">Delay Saved</div></div>
+  <div class="impact-item"><div class="impact-num c-purple" id="stat-cascade">0</div><div class="impact-lbl">Cascades</div></div>
+  <div class="impact-item"><div class="impact-num c-green"  id="stat-cost">Rs.0</div><div class="impact-lbl">Cost Saved</div></div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- MAP -->
+  <div style="flex:1;position:relative">
+    <div id="map" style="width:100%;height:100%"></div>
+
+    <!-- MAP CONTROLS -->
+    <div class="map-controls">
+      <button class="map-ctrl-btn" id="btn-all"  onclick="setMapView('all')">All Routes</button>
+      <button class="map-ctrl-btn active-red" id="btn-high" onclick="setMapView('high')">High Risk Only</button>
+      <button class="map-ctrl-btn" onclick="fitHighRisk()">Zoom to Alerts</button>
+    </div>
+
+    <!-- LEGEND -->
+    <div class="map-legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#ff4757"></div>High Risk — Act Now</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ffa502"></div>Medium — Monitor</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#2ed573"></div>Safe — On Track</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#1e90ff"></div>Rerouted — Fixed</div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+    <div class="panel-tabs">
+      <div class="tab active" onclick="showTab('alerts')">Live Alerts</div>
+      <div class="tab"        onclick="showTab('audit')">Audit Trail</div>
+      <div class="tab"        onclick="showTab('future')">Future</div>
+    </div>
+
+    <div class="search-bar">
+      <input class="search-input" id="search-input" placeholder="Search ID, city, cargo..." oninput="searchShipments(this.value)"/>
+    </div>
+
+    <div class="filter-bar">
+      <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
+      <button class="filter-btn" onclick="setFilter('high',this)">High</button>
+      <button class="filter-btn" onclick="setFilter('medium',this)">Medium</button>
+      <button class="filter-btn" onclick="setFilter('low',this)">Safe</button>
+      <button class="filter-btn" onclick="setFilter('rerouted',this)">Rerouted</button>
+    </div>
+
+    <div class="panel-content" id="tab-alerts">
+      <div id="alerts-list"><div class="loading">Loading...</div></div>
+    </div>
+
+    <div class="panel-content" id="tab-audit" style="display:none">
+      <div id="audit-list"><div class="loading">No reroutes yet.</div></div>
+    </div>
+
+    <div class="panel-content" id="tab-future" style="display:none">
+      <div class="future-section">
+        <div class="future-title">Future Potential v2.0</div>
+        <div class="future-item"><span class="fdot"></span>Real GPS tracking via IoT sensors on trucks</div>
+        <div class="future-item"><span class="fdot"></span>WhatsApp / SMS alerts to drivers on reroute</div>
+        <div class="future-item"><span class="fdot"></span>ML model on 1 year data — 90%+ accuracy</div>
+        <div class="future-item"><span class="fdot"></span>Insurance API — sell risk scores</div>
+        <div class="future-item"><span class="fdot"></span>Driver mobile app — new route instantly</div>
+        <div class="future-item"><span class="fdot"></span>Port and railway congestion integration</div>
+      </div>
+      <div class="future-section" style="border-color:#00d4aa33">
+        <div class="future-title" style="color:#00d4aa">Market Opportunity</div>
+        <div class="future-item"><span class="fdot" style="background:#00d4aa"></span>India logistics: Rs. 14 lakh crore market</div>
+        <div class="future-item"><span class="fdot" style="background:#00d4aa"></span>30% shipments face delays — our target</div>
+        <div class="future-item"><span class="fdot" style="background:#00d4aa"></span>SaaS: Rs. 5,000/month per company</div>
+        <div class="future-item"><span class="fdot" style="background:#00d4aa"></span>500 companies Year 1 = Rs. 3 crore ARR</div>
+      </div>
+    </div>
+
+    <div class="detail-drawer" id="detail-drawer">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div class="drawer-title" id="drawer-title">Details</div>
+        <span style="cursor:pointer;color:#555;font-size:13px;padding:2px 6px" onclick="closeDrawer()">X</span>
+      </div>
+      <div id="drawer-content"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const map=L.map('map').setView([22,80],5);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'CartoDB',maxZoom:18}).addTo(map);
+
+  let polylines=[],mapMarkers={},allShipments=[],currentFilter='all',currentMapView='high',searchQuery='';
+  let toastShipmentId=null,shownToasts=new Set();
+  const rc={high:'#ff4757',medium:'#ffa502',low:'#2ed573',rerouted:'#1e90ff'};
+  const getLevel=s=>s.rerouted?'rerouted':s.risk_level;
+
+  async function loadShipments(){
+    try{
+      const res=await fetch('/api/shipments');
+      const fresh=await res.json();
+      checkNewAlerts(fresh);
+      allShipments=fresh;
+      renderMap(allShipments);
+      renderAlerts(allShipments);
+      loadSummary();
+    }catch(e){console.error(e);}
+  }
+
+  // AUTO TOAST — shows automatically when new high risk found
+  function checkNewAlerts(shipments){
+    const highRisk=shipments.filter(s=>!s.rerouted&&s.risk_level==='high');
+    const unseen=highRisk.find(s=>!shownToasts.has(s.shipment_id));
+    if(!unseen)return;
+    shownToasts.add(unseen.shipment_id);
+    toastShipmentId=unseen.shipment_id;
+    document.getElementById('toast-id').textContent=unseen.shipment_id+' — '+unseen.cargo_type;
+    document.getElementById('toast-msg').textContent=
+      'Risk: '+unseen.risk_score+'/100 at '+unseen.current_location+'. Sensitivity: '+unseen.sensitivity.toUpperCase();
+    document.getElementById('toast').classList.add('show');
+    clearTimeout(window._tt);
+    window._tt=setTimeout(()=>document.getElementById('toast').classList.remove('show'),10000);
+  }
+
+  function closeToast(){document.getElementById('toast').classList.remove('show');}
+  function openFromToast(){closeToast();if(toastShipmentId)openDrawer(toastShipmentId);}
+
+  // RENDER MAP — default shows only HIGH RISK to reduce clutter
+  // Vehicle type to emoji map
+  const vehicleIcon={
+    'Truck':           '🚛',
+    'Mini Truck':      '🚐',
+    'Container':       '📦',
+    'Tanker':          '🛢️',
+    'Refrigerated Van':'🚚',
+  };
+
+  function renderMap(shipments){
+    polylines.forEach(p=>map.removeLayer(p));
+    Object.values(mapMarkers).forEach(m=>map.removeLayer(m));
+    polylines=[];mapMarkers={};
+
+    const toShow=currentMapView==='all' ? shipments : shipments.filter(s=>getLevel(s)===currentMapView);
+
+    toShow.forEach(s=>{
+      const lv=getLevel(s),col=rc[lv];
+
+      // Draw BOTH routes for rerouted shipments
+      if(s.rerouted){
+        // Original route — red dashed (danger route)
+        if(s.orig_route_coords && s.orig_route_coords.length>1){
+          const origLatLons=s.orig_route_coords.map(c=>[c.lat,c.lon]);
+          const origLine=L.polyline(origLatLons,{
+            color:'#ff4757',weight:2,opacity:0.7,dashArray:'8 5'
+          }).addTo(map);
+          origLine.bindTooltip('Original Route (Blocked)',{direction:'top'});
+          polylines.push(origLine);
+        }
+        // New route — teal solid (safe route)
+        if(s.new_route_coords && s.new_route_coords.length>1){
+          const newLatLons=s.new_route_coords.map(c=>[c.lat,c.lon]);
+          const newLine=L.polyline(newLatLons,{
+            color:'#00d4aa',weight:3,opacity:0.9
+          }).addTo(map);
+          newLine.bindTooltip('New Route (Active)',{direction:'top'});
+          polylines.push(newLine);
+        }
+      }
+
+      const emoji=vehicleIcon[s.vehicle_type]||'🚛';
+      const fontSize=lv==='high'?22:lv==='rerouted'?20:lv==='medium'?18:14;
+
+      // Glow ring for high risk, checkmark style for rerouted
+      const glowHtml=lv==='high'
+        ?`<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+           width:${fontSize+16}px;height:${fontSize+16}px;border-radius:50%;
+           background:${col}33;border:2px solid ${col};animation:pulse 1.5s infinite"></div>`
+        :lv==='rerouted'
+        ?`<div style="position:absolute;top:-4px;right:-4px;width:14px;height:14px;border-radius:50%;
+           background:#00d4aa;color:#000;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:700;z-index:2">✓</div>`
+        :'';
+
+      const iconHtml=`<div style="position:relative;display:flex;align-items:center;justify-content:center;width:${fontSize+20}px;height:${fontSize+20}px">
+        ${glowHtml}
+        <span style="font-size:${fontSize}px;position:relative;z-index:1;filter:drop-shadow(0 1px 3px #000)">${emoji}</span>
+      </div>`;
+
+      const icon=L.divIcon({
+        html:iconHtml,
+        iconSize:[fontSize+20,fontSize+20],
+        iconAnchor:[(fontSize+20)/2,(fontSize+20)/2],
+        className:''
+      });
+
+      const m=L.marker([s.current_lat,s.current_lon],{icon}).addTo(map);
+      m.bindTooltip(
+        `<b>${s.shipment_id}</b><br>${s.vehicle_type} — ${s.cargo_type}<br>Risk: <b>${s.risk_score}</b><br>At: ${s.current_location}${s.rerouted?' ✓ Rerouted':''}`,
+        {direction:'top'}
+      );
+      m.on('click',()=>openDrawer(s.shipment_id));
+      mapMarkers[s.shipment_id]=m;
+    });
+  }
+
+  function setMapView(view){
+    currentMapView=view;
+    document.getElementById('btn-all').className='map-ctrl-btn'+(view==='all'?' active-red':'');
+    document.getElementById('btn-high').className='map-ctrl-btn'+(view==='high'?' active-red':'');
+    renderMap(allShipments);
+  }
+
+  function fitHighRisk(){
+    const high=allShipments.filter(s=>getLevel(s)==='high');
+    if(!high.length){alert('No high risk shipments!');return;}
+    map.fitBounds(high.map(s=>[s.current_lat,s.current_lon]),{padding:[60,60]});
+    setMapView('high');
+  }
+
+  function renderAlerts(shipments){
+    let f=shipments;
+    if(searchQuery.trim()){
+      const q=searchQuery.toLowerCase();
+      f=f.filter(s=>s.shipment_id.toLowerCase().includes(q)||s.origin.toLowerCase().includes(q)||
+        s.destination.toLowerCase().includes(q)||s.current_location.toLowerCase().includes(q)||s.cargo_type.toLowerCase().includes(q));
+    }
+    if(currentFilter!=='all')f=f.filter(s=>getLevel(s)===currentFilter);
+    const order={high:0,medium:1,low:2,rerouted:3};
+    const sorted=[...f].sort((a,b)=>(order[getLevel(a)]||0)-(order[getLevel(b)]||0)||b.risk_score-a.risk_score);
+    document.getElementById('alerts-list').innerHTML=sorted.length===0
+      ?'<div class="loading">No shipments found.</div>'
+      :sorted.map(s=>{
+        const lv=getLevel(s);
+        return `<div class="alert-card ${lv}" onclick="openDrawer('${s.shipment_id}')">
+          <span class="risk-badge ${lv}">${lv.toUpperCase()} ${s.rerouted?'':s.risk_score}</span>
+          <div class="alert-id">${s.shipment_id}${lv==='high'?'<span class="cascade-badge">CASCADE</span>':''}</div>
+          <div class="alert-route">${s.origin} to ${s.destination}</div>
+          <div class="alert-cargo">${s.cargo_type} | At: ${s.current_location}</div>
+        </div>`;
+      }).join('');
+  }
+
+  function searchShipments(q){
+    searchQuery=q;
+    renderAlerts(allShipments);
+    if(q.length>=4){
+      const m=allShipments.find(s=>s.shipment_id.toLowerCase()===q.toLowerCase());
+      if(m&&mapMarkers[m.shipment_id]){map.setView([m.current_lat,m.current_lon],8);mapMarkers[m.shipment_id].openTooltip();}
+    }
+  }
+
+  function setFilter(f,btn){
+    currentFilter=f;
+    document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    renderAlerts(allShipments);
+    // Sync map with sidebar filter
+    currentMapView=f;
+    renderMap(allShipments);
+    // Auto zoom to filtered shipments
+    const filtered = f==='all'
+      ? allShipments
+      : allShipments.filter(s=>getLevel(s)===f);
+    if(filtered.length>0){
+      const bounds=filtered.map(s=>[s.current_lat,s.current_lon]);
+      map.fitBounds(bounds,{padding:[60,60]});
+    }
+  }
+
+  async function loadSummary(){
+    const res=await fetch('/api/summary');
+    const d=await res.json();
+    document.getElementById('stat-high').textContent=d.high_risk;
+    document.getElementById('stat-medium').textContent=d.medium_risk;
+    document.getElementById('stat-low').textContent=d.low_risk;
+    document.getElementById('stat-rerouted').textContent=d.rerouted;
+    document.getElementById('stat-saved').textContent=d.total_delay_avoided+'h';
+    document.getElementById('stat-cascade').textContent=d.cascade_alerts;
+    document.getElementById('stat-cost').textContent='Rs.'+(d.total_cost_saved/1000).toFixed(0)+'K';
+    document.getElementById('last-updated').textContent='Updated: '+d.last_updated;
+  }
+
+  async function openDrawer(id){
+    const res=await fetch('/api/shipments/'+id);
+    const s=await res.json();
+    const lv=getLevel(s);
+    map.setView([s.current_lat,s.current_lon],7);
+    document.getElementById('drawer-title').textContent=s.shipment_id+' — '+s.cargo_type;
+    const sc={critical:'#ff4757',high:'#ffa502',medium:'#1e90ff',low:'#2ed573'};
+    const bars=['weather','traffic','historical','cargo'].map(k=>{
+      const score=s[k+'_score']||0,col=score>=70?'#ff4757':score>=45?'#ffa502':'#2ed573';
+      return `<div class="bar-row"><div class="bar-label"><span>${k.charAt(0).toUpperCase()+k.slice(1)} Risk</span><span style="color:${col};font-weight:700">${score}</span></div>
+        <div class="bar-bg"><div class="bar-fill" style="width:${score}%;background:${col}"></div></div></div>`;
+    }).join('');
+    // Build route stop pills
+    const buildStops=(stops,type)=>(stops||[]).map(c=>`<span class="route-stop ${type}">${c}</span>`).join('→');
+
+    let actionHtml=s.rerouted
+      ?`<div class="reroute-detail">
+          <div class="reroute-detail-title" style="color:#ff4757">Original Route (Blocked)</div>
+          <div style="margin-bottom:6px">${buildStops(s.original_route_stops,'old')}</div>
+          <div class="reroute-detail-title" style="color:#00d4aa">New Route (Active)</div>
+          <div style="margin-bottom:8px">${buildStops(s.new_route_stops,'current')}</div>
+          <div class="route-legend">
+            <div class="route-leg-item"><div class="route-line-prev"></div><span>Original route (dashed red on map)</span></div>
+            <div class="route-leg-item"><div class="route-line-new"></div><span>New route (solid teal on map)</span></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
+            <div style="background:#00d4aa11;border-radius:6px;padding:8px;text-align:center">
+              <div style="font-size:16px;font-weight:700;color:#00d4aa">${s.delay_avoided_hrs}h</div>
+              <div style="font-size:10px;color:#888">Delay Avoided</div>
+            </div>
+            <div style="background:#00d4aa11;border-radius:6px;padding:8px;text-align:center">
+              <div style="font-size:14px;font-weight:700;color:#00d4aa">Rs.${(s.cost_saved_inr||0).toLocaleString()}</div>
+              <div style="font-size:10px;color:#888">Cost Saved</div>
+            </div>
+          </div>
+          <div style="font-size:10px;color:#666;margin-top:6px">
+            Approved by: ${s.approved_by} at ${s.approved_at||''}
+          </div>
+        </div>`
+      :lv==='high'
+      ?`<button class="btn btn-ai" id="ai-btn-${id}" onclick="getRecommendation('${id}')">Get AI Recommendation</button>
+         <button class="btn btn-approve" id="approve-btn-${id}" style="display:none" onclick="approveReroute('${id}')">Approve Reroute</button>`
+      :`<button class="btn btn-secondary" onclick="getRecommendation('${id}')">View AI Analysis</button>`;
+    document.getElementById('drawer-content').innerHTML=`
+      <div class="detail-row"><span class="key">Route</span><span class="val">${s.origin} to ${s.destination}</span></div>
+      <div class="detail-row"><span class="key">Current Location</span><span class="val">${s.current_location}</span></div>
+      <div class="detail-row"><span class="key">Sensitivity</span><span class="val" style="color:${sc[s.sensitivity]}">${s.sensitivity.toUpperCase()}</span></div>
+      <div class="detail-row"><span class="key">Cargo Value</span><span class="val">Rs.${(s.cargo_value_inr||0).toLocaleString()}</span></div>
+      <div class="detail-row"><span class="key">Vehicle</span><span class="val">${s.vehicle_type}</span></div>
+      <div class="detail-row"><span class="key">Weight</span><span class="val">${s.weight_tons} tons</span></div>
+      <div class="detail-row"><span class="key">Live Weather</span><span class="val" style="color:#ffa502">${s.weather_desc||'Fetching...'}</span></div>
+      <div class="detail-row"><span class="key">ETA</span><span class="val">${s.eta}</span></div>
+      <div class="detail-row"><span class="key">Operator</span><span class="val">${s.operator}</span></div>
+      <div class="risk-bars" style="margin-top:8px">${bars}</div>
+      <div class="ai-box" id="ai-result-box-${id}">
+        <div class="ai-label">Claude AI Recommendation</div>
+        <div id="ai-text-${id}" style="line-height:1.6"></div>
+        <div class="ai-routes" id="ai-routes-${id}"></div>
+      </div>${actionHtml}`;
+    document.getElementById('detail-drawer').classList.add('open');
+  }
+
+  function closeDrawer(){document.getElementById('detail-drawer').classList.remove('open');}
+
+  async function getRecommendation(id){
+    const btn=document.getElementById('ai-btn-'+id);
+    if(btn){btn.textContent='Asking Claude AI...';btn.disabled=true;}
+    const res=await fetch('/api/recommend/'+id);
+    const result=await res.json();
+    const box=document.getElementById('ai-result-box-'+id);
+    if(box){
+      document.getElementById('ai-text-'+id).textContent=result.recommendation||'No recommendation.';
+      const r1=result.routes?.alternate_1,r2=result.routes?.alternate_2,rd=document.getElementById('ai-routes-'+id);
+      if(r1&&r2&&rd)rd.innerHTML=`<b style="color:#00d4aa">Alt 1:</b> ${(r1.stops||[]).join(' to ')} | +${r1.estimated_hrs}h | Rs.${(r1.extra_cost_inr||0).toLocaleString()}<br>
+        <b style="color:#ffa502">Alt 2:</b> ${(r2.stops||[]).join(' to ')} | +${r2.estimated_hrs}h | Rs.${(r2.extra_cost_inr||0).toLocaleString()}`;
+      box.classList.add('show');
+    }
+    const ab=document.getElementById('approve-btn-'+id);if(ab)ab.style.display='block';
+    if(btn){btn.textContent='Refresh Recommendation';btn.disabled=false;}
+  }
+
+  async function approveReroute(id){
+    const res=await fetch('/api/approve/'+id,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({operator:'Dashboard Operator',route_choice:'alternate_1'})});
+    const data=await res.json();
+    if(data.success){alert('Reroute Approved!\n\n'+data.message);closeDrawer();await loadShipments();loadAudit();}
+  }
+
+  async function loadAudit(){
+    const res=await fetch('/api/audit');const data=await res.json();
+    const list=document.getElementById('audit-list');
+    if(!data.length){list.innerHTML='<div class="loading">No reroutes approved yet.</div>';return;}
+    list.innerHTML=[...data].reverse().map(a=>`
+      <div class="audit-entry">
+        <div class="audit-id">${a.shipment_id} — ${a.cargo_type}</div>
+        <div class="audit-msg">${a.origin} to ${a.destination}</div>
+        <div class="audit-saved">Delay: ${a.delay_avoided}h | Rs.${(a.cost_saved_inr||0).toLocaleString()} saved</div>
+        <div class="audit-msg">Risk: ${a.prev_risk_score} to ${a.new_risk_score} | By: ${a.operator}</div>
+        <div class="audit-time">${a.timestamp}</div>
+      </div>`).join('');
+  }
+
+  function showTab(tab){
+    ['alerts','audit','future'].forEach(t=>document.getElementById('tab-'+t).style.display=t===tab?'block':'none');
+    document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',['alerts','audit','future'][i]===tab));
+    if(tab==='audit')loadAudit();
+  }
+
+  async function refreshRisk(){
+    const btn=document.querySelector('.refresh-top');btn.textContent='Refreshing...';
+    await fetch('/api/refresh',{method:'POST'});await loadShipments();btn.textContent='Refresh Risk';
+  }
+
+  async function resetData(){
+    if(!confirm('Reset all data?'))return;
+    shownToasts.clear();
+    const btn=document.querySelector('.reset-btn');btn.textContent='Resetting...';
+    await fetch('/api/reset',{method:'DELETE'});await loadShipments();
+    btn.textContent='Reset Demo';
+    document.getElementById('audit-list').innerHTML='<div class="loading">No reroutes yet.</div>';
+  }
+
+  setInterval(loadShipments,60000);
+  loadShipments();
+</script>
+</body>
+</html>

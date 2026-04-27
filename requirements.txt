@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+pandas
+numpy
+requests
+anthropic
+sqlalchemy==1.4.46
+apscheduler
+folium
+plotly
+jinja2
+python-dotenv
+greenlet==2.0.2
