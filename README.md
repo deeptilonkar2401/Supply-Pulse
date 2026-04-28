@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # SupplyPulse 🚛
 ### AI-Powered Supply Chain Disruption Detection System
 
@@ -94,3 +95,7 @@ http://localhost:8000
 ---
 
 *Built for Smart Supply Chain Hackathon 2025*
+=======
+# Supply-Pulse
+AI-powered supply chain disruption detection system.  Built with Python, FastAPI, Claude AI, OpenWeather API. Real-time risk scoring, cascade propagation, and  automated rerouting recommendations.
+>>>>>>> 18d6cd2acbfc6a5353695e0162b4e803bfe919b3

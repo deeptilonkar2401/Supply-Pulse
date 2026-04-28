@@ -346,21 +346,42 @@
       }
 
       const emoji=vehicleIcon[s.vehicle_type]||'🚛';
-      const fontSize=lv==='high'?22:lv==='rerouted'?20:lv==='medium'?18:14;
+      const fontSize=lv==='high'?22:lv==='rerouted'?20:lv==='medium'?18:16;
 
-      // Glow ring for high risk, checkmark style for rerouted
-      const glowHtml=lv==='high'
-        ?`<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-           width:${fontSize+16}px;height:${fontSize+16}px;border-radius:50%;
-           background:${col}33;border:2px solid ${col};animation:pulse 1.5s infinite"></div>`
-        :lv==='rerouted'
-        ?`<div style="position:absolute;top:-4px;right:-4px;width:14px;height:14px;border-radius:50%;
-           background:#00d4aa;color:#000;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:700;z-index:2">✓</div>`
-        :'';
+      // Glow ring for ALL risk levels — red/yellow/green/blue
+      let glowHtml='';
+      if(lv==='high'){
+        // Red pulsing glow — fast blink
+        glowHtml=`<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+          width:${fontSize+16}px;height:${fontSize+16}px;border-radius:50%;
+          background:#ff475733;border:2.5px solid #ff4757;
+          animation:pulse 1.2s infinite"></div>`;
+      } else if(lv==='medium'){
+        // Yellow slow pulsing glow
+        glowHtml=`<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+          width:${fontSize+14}px;height:${fontSize+14}px;border-radius:50%;
+          background:#ffa50233;border:2px solid #ffa502;
+          animation:pulse 2s infinite"></div>`;
+      } else if(lv==='low'){
+        // Green subtle glow — very slow
+        glowHtml=`<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+          width:${fontSize+12}px;height:${fontSize+12}px;border-radius:50%;
+          background:#2ed57322;border:1.5px solid #2ed573;
+          animation:pulse 3s infinite"></div>`;
+      } else if(lv==='rerouted'){
+        // Teal green pulsing glow for rerouted + checkmark badge
+        glowHtml=`<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+          width:${fontSize+14}px;height:${fontSize+14}px;border-radius:50%;
+          background:#00d4aa22;border:2px solid #00d4aa;
+          animation:pulse 2.5s infinite"></div>
+          <div style="position:absolute;top:-4px;right:-4px;width:14px;height:14px;border-radius:50%;
+          background:#00d4aa;color:#000;font-size:9px;display:flex;align-items:center;
+          justify-content:center;font-weight:700;z-index:2">✓</div>`;
+      }
 
-      const iconHtml=`<div style="position:relative;display:flex;align-items:center;justify-content:center;width:${fontSize+20}px;height:${fontSize+20}px">
+      const iconHtml=`<div style="position:relative;display:flex;align-items:center;justify-content:center;width:${fontSize+22}px;height:${fontSize+22}px">
         ${glowHtml}
-        <span style="font-size:${fontSize}px;position:relative;z-index:1;filter:drop-shadow(0 1px 3px #000)">${emoji}</span>
+        <span style="font-size:${fontSize}px;position:relative;z-index:1;filter:drop-shadow(0 2px 4px #000)">${emoji}</span>
       </div>`;
 
       const icon=L.divIcon({
@@ -370,9 +391,21 @@
         className:''
       });
 
-      const m=L.marker([s.current_lat,s.current_lon],{icon}).addTo(map);
+      // Rerouted truck — place on new route midpoint (moving towards destination)
+      let markerLat = s.current_lat, markerLon = s.current_lon;
+      let posLabel  = s.current_location;
+      if(s.rerouted && s.new_route_coords && s.new_route_coords.length >= 2){
+        // Place truck at midpoint of new route to show it's moving on new path
+        const coords = s.new_route_coords;
+        const mid    = Math.floor(coords.length / 2);
+        markerLat    = coords[mid].lat;
+        markerLon    = coords[mid].lon;
+        posLabel     = coords[mid].city + ' (new route)';
+      }
+
+      const m=L.marker([markerLat, markerLon],{icon}).addTo(map);
       m.bindTooltip(
-        `<b>${s.shipment_id}</b><br>${s.vehicle_type} — ${s.cargo_type}<br>Risk: <b>${s.risk_score}</b><br>At: ${s.current_location}${s.rerouted?' ✓ Rerouted':''}`,
+        `<b>${s.shipment_id}</b> ✓ Rerouted<br>${s.vehicle_type} — ${s.cargo_type}<br>Now on new route at: ${posLabel}<br>Delay saved: ${s.delay_avoided_hrs}h`,
         {direction:'top'}
       );
       m.on('click',()=>openDrawer(s.shipment_id));
@@ -428,18 +461,25 @@
     L.circleMarker([s.dest_lat,s.dest_lon],{radius:8,fillColor:'#a855f7',color:'#fff',weight:2,fillOpacity:1})
       .bindTooltip(`<b>DESTINATION</b><br>${s.destination}`,{direction:'top'}).addTo(map);
 
-    // Truck icon at current position
+    // Rerouted truck — place on new route midpoint (teal green moving on new path)
     const emoji=vehicleIcon[s.vehicle_type]||'🚛';
+    let truckLat=s.current_lat, truckLon=s.current_lon, truckLabel='Current Position';
+    if(s.new_route_coords && s.new_route_coords.length>=2){
+      const mid=Math.floor(s.new_route_coords.length/2);
+      truckLat=s.new_route_coords[mid].lat;
+      truckLon=s.new_route_coords[mid].lon;
+      truckLabel=s.new_route_coords[mid].city+' (on new route)';
+    }
     const icon=L.divIcon({
-      html:`<div style="position:relative;display:flex;align-items:center;justify-content:center;width:40px;height:40px">
-        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:36px;height:36px;border-radius:50%;background:#00d4aa33;border:2px solid #00d4aa;animation:pulse 1.5s infinite"></div>
-        <span style="font-size:22px;position:relative;z-index:1">${emoji}</span>
-        <div style="position:absolute;top:-4px;right:-4px;width:14px;height:14px;border-radius:50%;background:#00d4aa;color:#000;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:700">✓</div>
+      html:`<div style="position:relative;display:flex;align-items:center;justify-content:center;width:44px;height:44px">
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:40px;height:40px;border-radius:50%;background:#00d4aa22;border:2.5px solid #00d4aa;animation:pulse 2s infinite"></div>
+        <span style="font-size:24px;position:relative;z-index:1;filter:drop-shadow(0 2px 6px #00d4aa)">${emoji}</span>
+        <div style="position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:50%;background:#00d4aa;color:#000;font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:900;z-index:3">✓</div>
       </div>`,
-      iconSize:[40,40],iconAnchor:[20,20],className:''
+      iconSize:[44,44],iconAnchor:[22,22],className:''
     });
-    const m=L.marker([s.current_lat,s.current_lon],{icon}).addTo(map);
-    m.bindTooltip(`<b>${s.shipment_id}</b><br>${s.vehicle_type}<br>✓ Rerouted`,{direction:'top'});
+    const m=L.marker([truckLat,truckLon],{icon}).addTo(map);
+    m.bindTooltip(`<b>${s.shipment_id}</b> ✓ Rerouted<br>${s.vehicle_type}<br>Now at: ${truckLabel}<br>Delay saved: ${s.delay_avoided_hrs}h`,{direction:'top'});
     mapMarkers[s.shipment_id]=m;
 
     // Fit map to show both routes
