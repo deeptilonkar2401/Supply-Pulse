@@ -39,9 +39,9 @@ def scheduled_risk_update():
         _,cascades=result
         print(f"[Auto] Risk update. Cascades: {len(cascades)}")
 
-@app.get("/",response_class=HTMLResponse)
-async def dashboard(request: Request):
-    return templates.TemplateResponse("index.html",{"request":request})
+@app.get("/")
+def home():
+    return {"message": "API chal rahi hai 🚀"}
 
 @app.get("/api/shipments")
 def get_shipments():
