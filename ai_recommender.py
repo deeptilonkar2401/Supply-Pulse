@@ -1,9 +1,8 @@
-import anthropic, json, os, random
-from datetime import datetime
+import anthropic, os
 from dotenv import load_dotenv
 load_dotenv()
 
-# CLEAN FIX: No proxies, uses standard environment variable
+# THE FIX: Ensure NO arguments other than api_key are inside these parentheses
 client = anthropic.Anthropic(
     api_key=os.environ.get("ANTHROPIC_API_KEY")
 )
