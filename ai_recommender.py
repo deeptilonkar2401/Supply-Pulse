@@ -1,11 +1,18 @@
 import anthropic, os
 from dotenv import load_dotenv
+
+# This looks for a .env file in your folder
 load_dotenv()
 
-# THE FIX: Ensure NO arguments other than api_key are inside these parentheses
-client = anthropic.Anthropic(
-    api_key=os.environ.get("ANTHROPIC_API_KEY")
-)
+# Get the key from the environment
+api_key = os.environ.get("ANTHROPIC_API_KEY")
+
+# Check if the key exists, otherwise use a placeholder to prevent crashing
+if not api_key:
+    print("WARNING: ANTHROPIC_API_KEY not found in environment!")
+    api_key = "your-key-here" 
+
+client = anthropic.Anthropic(api_key=api_key)
 
 CITIES = {
     "Mumbai":{"lat":19.0760,"lon":72.8777},"Delhi":{"lat":28.6139,"lon":77.2090},
