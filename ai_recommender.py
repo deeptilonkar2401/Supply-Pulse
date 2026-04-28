@@ -1,18 +1,14 @@
-import anthropic, os
+import anthropic, json, os, random
+from datetime import datetime
 from dotenv import load_dotenv
 
-# This looks for a .env file in your folder
+# Load variables from .env file for local development
 load_dotenv()
 
-# Get the key from the environment
-api_key = os.environ.get("ANTHROPIC_API_KEY")
-
-# Check if the key exists, otherwise use a placeholder to prevent crashing
-if not api_key:
-    print("WARNING: ANTHROPIC_API_KEY not found in environment!")
-    api_key = "your-key-here" 
-
-client = anthropic.Anthropic(api_key=api_key)
+# Client setup - Optimized for Render and Local use
+client = anthropic.Anthropic(
+    api_key=os.environ.get("ANTHROPIC_API_KEY")
+)
 
 CITIES = {
     "Mumbai":{"lat":19.0760,"lon":72.8777},"Delhi":{"lat":28.6139,"lon":77.2090},
@@ -26,17 +22,24 @@ CITIES = {
 }
 
 def build_alternate_routes(shipment):
+    """
+    Build alternate routes keeping correct order — origin to destination.
+    Alt1: Skip the currently BLOCKED city, keep rest in order
+    Alt2: Direct origin to destination
+    """
     route   = shipment["route_stops"]
     origin  = shipment["origin"]
     dest    = shipment["destination"]
     blocked = shipment["current_location"]
 
+    # Alt 1: Remove ONLY the blocked city, preserve order of rest
     alt1_stops = [city for city in route if city != blocked]
     if origin not in alt1_stops:
         alt1_stops.insert(0, origin)
     if dest not in alt1_stops:
         alt1_stops.append(dest)
 
+    # Alt 2: Direct route — current location straight to destination
     current = shipment["current_location"]
     alt2_stops = [current, dest]
 
@@ -75,18 +78,20 @@ Routes:
 State: main risk, best route, hours saved. Be direct and practical."""
 
     try:
+        # Using a stable model version
         msg = client.messages.create(
-            model="claude-3-5-sonnet-20240620", # Updated to stable version
+            model="claude-3-5-sonnet-20240620",
             max_tokens=300,
             messages=[{"role":"user","content":prompt}]
         )
         recommendation = msg.content[0].text
     except Exception as e:
-        print(f"AI Error: {e}") # Helpful for Render logs
+        # Fallback if AI fails or API key is missing
+        print(f"AI Connection Error: {e}")
         recommendation = (
-            f"HIGH RISK at {shipment['current_location']} due to weather+traffic. "
-            f"Recommend Alt Route 1 — skip {shipment['current_location']} and continue to {shipment['destination']}. "
-            f"Estimated 2-3h delay avoided. Critical for {shipment['cargo_type']} cargo."
+            f"HIGH RISK at {shipment['current_location']} due to current delays. "
+            f"Recommend Alt Route 1 — bypass {shipment['current_location']} to reach {shipment['destination']}. "
+            f"Priority for {shipment['cargo_type']} cargo to avoid spoilage/penalties."
         )
 
     return {
