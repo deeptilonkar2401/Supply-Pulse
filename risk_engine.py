@@ -32,6 +32,44 @@ CITIES = {
 weather_cache = {}
 
 
+def has_passed_risky_stops(shipment):
+    """
+    Check if the shipment has already passed ALL upcoming risky stops.
+    If current_location is at or near the destination, no rerouting needed.
+    Logic: if current_location is the LAST stop or destination, mark as low risk.
+    Also: if current_location index is >= second last stop, shipment is almost done.
+    """
+    route = shipment.get("route_stops", [])
+    current = shipment.get("current_location", "")
+    destination = shipment.get("destination", "")
+
+    # If already at destination
+    if current == destination:
+        return True
+
+    # If route has 0 or 1 stops, nothing to reroute
+    if len(route) <= 1:
+        return True
+
+    # If current location is not in route, can't determine — don't skip
+    if current not in route:
+        return False
+
+    current_idx = route.index(current)
+    total_stops = len(route)
+
+    # If shipment is at the last stop or second-to-last stop heading to destination
+    # it has already passed all intermediate risky points
+    if current_idx >= total_stops - 1:
+        return True
+
+    # If shipment is at the destination city directly
+    if route[current_idx] == destination:
+        return True
+
+    return False
+
+
 def get_real_weather_score(location):
     """
     Fetch REAL weather using Open-Meteo API.
@@ -130,47 +168,35 @@ def get_real_weather_score(location):
 def calculate_weather_risk_from_api(weather_id, wind_speed, humidity, visibility):
     """
     Convert real weather data into a risk score 0-100.
-
-    OpenWeather ID ranges:
-    2xx = Thunderstorm  -> very high risk
-    3xx = Drizzle       -> low risk
-    5xx = Rain          -> medium-high risk
-    6xx = Snow          -> high risk
-    7xx = Atmosphere (fog, haze, dust) -> medium risk
-    800 = Clear sky     -> low risk
-    80x = Clouds        -> low-medium risk
     """
     base_score = 0
 
-    # Weather condition score
-    # wttr.in codes + OpenWeather codes both handled
-    if weather_id in [389, 386, 200, 201, 202]:   # Thunderstorm with rain/hail
+    if weather_id in [389, 386, 200, 201, 202]:
         base_score = 90
-    elif weather_id in [392, 395, 232, 231, 230]:  # Thunder with snow/ice
+    elif weather_id in [392, 395, 232, 231, 230]:
         base_score = 85
-    elif weather_id in [377, 374, 371, 368]:        # Ice/sleet
+    elif weather_id in [377, 374, 371, 368]:
         base_score = 80
-    elif weather_id in [365, 362, 338, 335]:        # Snow + rain mix
+    elif weather_id in [365, 362, 338, 335]:
         base_score = 70
-    elif weather_id in [359, 356, 308, 305]:        # Heavy rain
+    elif weather_id in [359, 356, 308, 305]:
         base_score = 65
-    elif weather_id in [353, 350, 302, 299]:        # Moderate rain
+    elif weather_id in [353, 350, 302, 299]:
         base_score = 55
-    elif weather_id in [266, 263, 185, 182]:        # Light drizzle/rain
+    elif weather_id in [266, 263, 185, 182]:
         base_score = 35
-    elif weather_id in [284, 281]:                  # Freezing drizzle
+    elif weather_id in [284, 281]:
         base_score = 60
-    elif weather_id in [248, 260]:                  # Fog/freezing fog
+    elif weather_id in [248, 260]:
         base_score = 70
-    elif weather_id in [143]:                       # Mist
+    elif weather_id in [143]:
         base_score = 40
-    elif weather_id in [119, 122]:                  # Overcast/cloudy
+    elif weather_id in [119, 122]:
         base_score = 20
-    elif weather_id in [116]:                       # Partly cloudy
+    elif weather_id in [116]:
         base_score = 15
-    elif weather_id in [113]:                       # Sunny/clear
+    elif weather_id in [113]:
         base_score = 10
-    # OpenWeather codes fallback
     elif 200 <= weather_id <= 232:
         base_score = 85
     elif 300 <= weather_id <= 321:
@@ -188,7 +214,6 @@ def calculate_weather_risk_from_api(weather_id, wind_speed, humidity, visibility
     else:
         base_score = 30
 
-    # Add wind speed penalty (>10 m/s is dangerous for trucks)
     if wind_speed > 20:
         base_score += 20
     elif wind_speed > 15:
@@ -196,13 +221,11 @@ def calculate_weather_risk_from_api(weather_id, wind_speed, humidity, visibility
     elif wind_speed > 10:
         base_score += 6
 
-    # Add humidity penalty (>85% means heavy moisture, fog likely)
     if humidity > 90:
         base_score += 10
     elif humidity > 80:
         base_score += 5
 
-    # Low visibility penalty
     if visibility < 1000:
         base_score += 20
     elif visibility < 3000:
@@ -216,40 +239,35 @@ def calculate_weather_risk_from_api(weather_id, wind_speed, humidity, visibility
 def get_simulated_weather_score(location):
     """
     Realistic weather simulation based on actual Indian seasonal patterns.
-    Uses current month to simulate realistic conditions.
     """
     from datetime import datetime
     month = datetime.now().month
 
-    # April-June = hot/dry, July-Sept = monsoon, Oct-Nov = post monsoon, Dec-Mar = winter
-    # Each city has realistic risk ranges per season
     seasonal_risk = {
-        # format: (monsoon_range, summer_range, winter_range)
-        "Mumbai":    [(60,95), (20,55), (10,35)],  # heavy monsoon city
-        "Delhi":     [(30,70), (25,65), (10,40)],  # dusty summers
-        "Kolkata":   [(65,95), (30,60), (10,35)],  # very heavy monsoon
-        "Chennai":   [(50,90), (20,50), (40,80)],  # northeast monsoon Oct-Dec
-        "Bangalore": [(30,65), (10,40), (10,30)],  # mild city
+        "Mumbai":    [(60,95), (20,55), (10,35)],
+        "Delhi":     [(30,70), (25,65), (10,40)],
+        "Kolkata":   [(65,95), (30,60), (10,35)],
+        "Chennai":   [(50,90), (20,50), (40,80)],
+        "Bangalore": [(30,65), (10,40), (10,30)],
         "Hyderabad": [(40,75), (20,55), (10,35)],
         "Pune":      [(45,80), (15,45), (10,30)],
         "Ahmedabad": [(25,60), (20,55), (5,25)],
-        "Jaipur":    [(20,55), (25,60), (5,25)],   # dry city
-        "Nagpur":    [(50,85), (30,70), (10,35)],  # extreme heat + monsoon
-        "Lucknow":   [(40,75), (20,55), (15,45)],  # fog in winter
+        "Jaipur":    [(20,55), (25,60), (5,25)],
+        "Nagpur":    [(50,85), (30,70), (10,35)],
+        "Lucknow":   [(40,75), (20,55), (15,45)],
         "Bhopal":    [(45,80), (20,55), (10,35)],
-        "Surat":     [(55,90), (20,50), (10,30)],  # coastal heavy rain
+        "Surat":     [(55,90), (20,50), (10,30)],
         "Indore":    [(40,75), (20,50), (10,35)],
-        "Raipur":    [(55,90), (25,60), (10,35)],  # high monsoon
+        "Raipur":    [(55,90), (25,60), (10,35)],
     }
 
-    # Determine season
-    if 6 <= month <= 9:    # Monsoon
+    if 6 <= month <= 9:
         idx = 0
         season = "Monsoon"
-    elif 3 <= month <= 5:  # Summer
+    elif 3 <= month <= 5:
         idx = 1
         season = "Summer"
-    else:                  # Winter
+    else:
         idx = 2
         season = "Winter"
 
@@ -257,7 +275,6 @@ def get_simulated_weather_score(location):
     lo, hi = ranges[idx]
     score = random.randint(lo, hi)
 
-    # Weather descriptions based on score
     if score >= 75:
         desc = f"{season}: Heavy Rain / Thunderstorm"
     elif score >= 55:
@@ -324,7 +341,6 @@ def calculate_risk_score(shipment):
     route_stops = shipment["route_stops"]
     multiplier  = shipment["risk_multiplier"]
 
-    # Real weather score
     weather_result = get_real_weather_score(current_loc)
     if isinstance(weather_result, tuple):
         weather_score, weather_desc = weather_result
@@ -376,17 +392,26 @@ def run_risk_engine():
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Running risk engine ({api_mode} weather)...")
 
     for shipment in shipments:
+        # Skip already rerouted shipments
         if shipment["rerouted"]:
             continue
 
+        # ✅ NEW FIX: If shipment has already passed all risky stops, mark as low risk
+        if has_passed_risky_stops(shipment):
+            shipment["risk_score"]       = random.randint(5, 20)
+            shipment["risk_level"]       = "low"
+            shipment["weather_desc"]     = shipment.get("weather_desc", "N/A")
+            print(f"  [{shipment['shipment_id']}] Already past risky stops -> forced LOW risk")
+            continue
+
         scores = calculate_risk_score(shipment)
-        shipment["risk_score"]      = scores["final_score"]
-        shipment["weather_score"]   = scores["weather_score"]
-        shipment["weather_desc"]    = scores.get("weather_desc", "")
-        shipment["traffic_score"]   = scores["traffic_score"]
-        shipment["historical_score"]= scores["historical_score"]
-        shipment["cargo_score"]     = scores["cargo_score"]
-        shipment["risk_level"]      = get_risk_level(
+        shipment["risk_score"]       = scores["final_score"]
+        shipment["weather_score"]    = scores["weather_score"]
+        shipment["weather_desc"]     = scores.get("weather_desc", "")
+        shipment["traffic_score"]    = scores["traffic_score"]
+        shipment["historical_score"] = scores["historical_score"]
+        shipment["cargo_score"]      = scores["cargo_score"]
+        shipment["risk_level"]       = get_risk_level(
             scores["final_score"], shipment["sensitivity"]
         )
 
