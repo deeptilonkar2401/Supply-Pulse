@@ -3,7 +3,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv()
 
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY","your-key-here"))
+# ❌ REMOVE GLOBAL CLIENT (important fix)
 
 CITIES = {
     "Mumbai":{"lat":19.0760,"lon":72.8777},"Delhi":{"lat":28.6139,"lon":77.2090},
@@ -17,27 +17,17 @@ CITIES = {
 }
 
 def build_alternate_routes(shipment):
-    """
-    Build alternate routes keeping correct order — origin to destination.
-    Alt1: Skip the currently BLOCKED city, keep rest in order
-    Alt2: Direct origin to destination
-    """
-    route   = shipment["route_stops"]   # e.g. [Mumbai, Pune, Hyderabad, Chennai, Bangalore]
-    origin  = shipment["origin"]        # Mumbai
-    dest    = shipment["destination"]   # Bangalore
-    blocked = shipment["current_location"]  # e.g. Pune (the problem city)
+    route   = shipment["route_stops"]
+    origin  = shipment["origin"]
+    dest    = shipment["destination"]
+    blocked = shipment["current_location"]
 
-    # Alt 1: Remove ONLY the blocked city, preserve order of rest
-    # e.g. [Mumbai, Hyderabad, Chennai, Bangalore] — Pune skipped
     alt1_stops = [city for city in route if city != blocked]
-    # Make sure origin and destination are still there
     if origin not in alt1_stops:
         alt1_stops.insert(0, origin)
     if dest not in alt1_stops:
         alt1_stops.append(dest)
 
-    # Alt 2: Direct route — current location straight to destination
-    # e.g. truck is at Pune, go directly Pune → Bangalore
     current = shipment["current_location"]
     alt2_stops = [current, dest]
 
@@ -63,37 +53,42 @@ def build_alternate_routes(shipment):
 
 def get_ai_recommendation(shipment):
     routes = build_alternate_routes(shipment)
+
     prompt = f"""You are a logistics expert AI for India supply chain.
 Shipment {shipment['shipment_id']} is HIGH RISK. Give a SHORT 3-line recommendation.
 Cargo: {shipment['cargo_type']} (sensitivity: {shipment['sensitivity']})
 Current Location: {shipment['current_location']} | Destination: {shipment['destination']}
 Risk Score: {shipment['risk_score']}/100
-Weather Risk: {shipment.get('weather_score','N/A')} | Traffic: {shipment.get('traffic_score','N/A')}
 Routes:
-1. Current: {' > '.join(routes['original']['stops'])} | {routes['original']['estimated_hrs']}h | Rs.0
-2. Alt 1 (skip blocked): {' > '.join(routes['alternate_1']['stops'])} | {routes['alternate_1']['estimated_hrs']}h | Rs.{routes['alternate_1']['extra_cost_inr']}
-3. Alt 2 (direct): {' > '.join(routes['alternate_2']['stops'])} | {routes['alternate_2']['estimated_hrs']}h | Rs.{routes['alternate_2']['extra_cost_inr']}
-State: main risk, best route, hours saved. Be direct and practical."""
+1. Current: {' > '.join(routes['original']['stops'])}
+2. Alt 1: {' > '.join(routes['alternate_1']['stops'])}
+3. Alt 2: {' > '.join(routes['alternate_2']['stops'])}
+"""
 
     try:
+        # ✅ CREATE CLIENT HERE (not global)
+        client = anthropic.Anthropic(
+            api_key=os.getenv("ANTHROPIC_API_KEY")
+        )
+
         msg = client.messages.create(
             model="claude-sonnet-4-20250514",
-            max_tokens=300,
+            max_tokens=200,
             messages=[{"role":"user","content":prompt}]
         )
+
         recommendation = msg.content[0].text
+
     except Exception as e:
+        # ✅ fallback (no crash)
         recommendation = (
-            f"HIGH RISK at {shipment['current_location']} due to weather+traffic. "
-            f"Recommend Alt Route 1 — skip {shipment['current_location']} and continue to {shipment['destination']}. "
-            f"Estimated 2-3h delay avoided. Critical for {shipment['cargo_type']} cargo."
+            f"HIGH RISK at {shipment['current_location']}. "
+            f"Use alternate route to avoid delay. "
+            f"Prioritize delivery of {shipment['cargo_type']}."
         )
 
     return {
         "recommendation": recommendation,
         "routes": routes,
-        "delay_avoided_hrs": round(
-            abs(routes['alternate_1']['estimated_hrs'] - routes['original']['estimated_hrs']) * 0.6, 1
-        ),
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
