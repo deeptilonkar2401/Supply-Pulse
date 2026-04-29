@@ -2,7 +2,7 @@
 # SupplyPulse 🚛
 ### AI-Powered Supply Chain Disruption Detection System
 
-> **"Jo problem aaj 5 ghante baad pata chalti hai, woh humara system 5 ghante PEHLE bata deta hai."**
+> **"The problem u might know after coming across it will be in ur consideration 5 hours ago even before it occurs ."**
 
 ---
 
